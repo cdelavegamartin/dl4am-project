@@ -127,6 +127,3 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-
-#testcommit name with ssh
-#testcommit name with ssh now from vscode
