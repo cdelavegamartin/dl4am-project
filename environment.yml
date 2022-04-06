@@ -1,0 +1,10 @@
+name: dl4amproj
+channels:
+  - conda-forge
+  - pytorch
+dependencies:
+  - python=3.9
+  - numpy
+  - pytorch
+  - torchaudio
+  - cudatoolkit=11.6
