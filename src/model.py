@@ -1,11 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-# from .core import get_mlp, get_gru, scale_function, remove_above_nyquist, upsample
-# from .core import harmonic_synth, amp_to_impulse_response, fft_convolve
-# from .core import resample
-# import math
-
 
 def get_conv_block(in_channels, out_channels, kernel_size, stride=1, padding=32):
     
@@ -15,7 +10,7 @@ def get_conv_block(in_channels, out_channels, kernel_size, stride=1, padding=32)
                 stride, padding, bias=False))
 
     
-    net.append(nn.BatchNorm1d(out_channels))
+    net.append(nn.BatchNorm1d(out_channels,momentum=0.5))
     net.append(nn.ReLU())
     net.append(nn.MaxPool1d(2))
     return nn.Sequential(*net)
@@ -59,7 +54,7 @@ class PitchExtractor(nn.Module):
         
         self.classifier = nn.Sequential(
             torch.nn.Linear(self.in_features, self.pitch_bins),
-            torch.nn.Sigmoid()
+            # torch.nn.Sigmoid()
         )
 
 
@@ -79,17 +74,17 @@ if __name__ == "__main__":
 
     
 
-    # TODO: GPU is not being recognized
+    
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using {device} device")
 
-    input = torch.randn(23,1,1024)
+    input = torch.randn(23,1,1024).to(device)
     x = input
     
     x = x.reshape(-1, 256)
-    print(f"output rearranged: {x.size()}\n")
+    print(f"output rearranged: {x.size()}\nDevice: {x.device}")
 
-    pitch_model = PitchExtractor(44100,model_size='medium')
+    pitch_model = PitchExtractor(44100,model_size='medium').to(device)
     output = pitch_model.forward(input)
     print(f"output: {output.size()}\n")
     print(f"in_f: {pitch_model.in_features}")
