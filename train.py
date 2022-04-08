@@ -14,7 +14,7 @@ from utils.data import MdbStemSynthDataset
 
 
 
-def convert_data(stem, hop=0.01):
+def preprocess_data_for_crepe(stem, hop=0.01):
     window_size = 1024
     hop_length_samples = int(hop*stem['samplerate'])
     audio = stem['audio']
@@ -59,21 +59,6 @@ def freq_to_cents(frequency):
 
     return cents
 
-
-def map_to_activation(frequency, f_min=32.7, f_max=1975.5, n_bins=360):
-    cents_min = freq_to_cents(torch.tensor(f_min))
-    # print(f"cents_min: {cents_min}")
-    cents_max = freq_to_cents(torch.tensor(f_max))
-    # print(f"cents_max: {cents_max}")
-    bins = torch.from_numpy(np.linspace(cents_min,cents_max,n_bins,dtype=np.float32))
-    cents = freq_to_cents(frequency)
-    # print(f"cents: {cents}")
-    
-
-    activation = np.exp(-(bins-cents)**2/(2*25**2))
-    return activation
-
-
 def create_bins(f_min=32.7, f_max=1975.5, n_bins=360):
     cents_min = freq_to_cents(torch.tensor(f_min))
     # print(f"cents_min: {cents_min}")
@@ -116,7 +101,7 @@ bins = bins.to(device)
 # time_annot = stem['pitch'][:,0]
 # print(time_annot.shape)
 
-# frames,predictions = convert_data(stem)
+# frames,predictions = preprocess_data_for_crepe(stem)
 # print('frames: ', frames)
 
 opt = torch.optim.Adam(p_ext.parameters(), lr=1e-4)
@@ -148,7 +133,7 @@ for epoch in tqdm(range(epochs)):
     # time_annot = stem['pitch'][:,0]
     # print(time_annot.shape)
 
-    frames,predictions = convert_data(stem)
+    frames,predictions = preprocess_data_for_crepe(stem)
     p_ext.to(device)
     frames = frames.to(device)
     frames = frames.unsqueeze(1)
@@ -183,7 +168,7 @@ for epoch in tqdm(range(epochs)):
             stem['audio'] = resampy.resample(stem['audio'], stem['samplerate'], model_sr)
             stem['samplerate']=model_sr
             print(f"validation with:", stem['name'])
-            frames,predictions = convert_data(stem)
+            frames,predictions = preprocess_data_for_crepe(stem)
             
             frames = frames.to(device)
             frames = frames.unsqueeze(1)
