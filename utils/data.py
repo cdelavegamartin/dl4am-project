@@ -11,7 +11,7 @@ import wave
 
 
 
-class MdBStemSynthDataset(Dataset):
+class MdbStemSynthDataset(Dataset):
     def __init__(self, wav_dir, annot_dir, sr=None, transform=None):
 
         self.wav_dir = wav_dir
@@ -43,11 +43,10 @@ class MdBStemSynthDataset(Dataset):
         return sample
 
 
-
 if __name__ == "__main__":
 
 
-    mdb_dataset = MdBStemSynthDataset("datasets/MDB-stem-synth/audio_stems","datasets/MDB-stem-synth/annotation_stems")
+    mdb_dataset = MdbStemSynthDataset("datasets/MDB-stem-synth/audio_stems","datasets/MDB-stem-synth/annotation_stems")
     print(mdb_dataset.data_fnames[0])
     dat = mdb_dataset[0]
     print(type(dat[0]))

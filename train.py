@@ -10,7 +10,7 @@ import time
 
 
 from src.model import PitchExtractor
-from utils.data import MdBStemSynthDataset
+from utils.data import MdbStemSynthDataset
 
 
 
@@ -100,7 +100,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using {device} device")
 
 
-mdb_dataset = MdBStemSynthDataset("datasets/MDB-stem-synth/audio_stems","datasets/MDB-stem-synth/annotation_stems")
+mdb_dataset = MdbStemSynthDataset("datasets/MDB-stem-synth/audio_stems","datasets/MDB-stem-synth/annotation_stems")
 
 model_sr = 16000
 p_ext = PitchExtractor(model_sr,model_size='medium')
