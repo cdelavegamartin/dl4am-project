@@ -107,3 +107,7 @@ dmypy.json
 
 # Datasets
 datasets/
+
+#  outputs
+trained_models/
+runs/
