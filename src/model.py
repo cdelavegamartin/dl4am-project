@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-def get_conv_block(in_channels, out_channels, kernel_size, stride=1, padding=32):
+def get_conv1d_block(in_channels, out_channels, kernel_size, stride=1, padding=32):
     
     net = []
 
@@ -47,7 +47,7 @@ class PitchExtractor(nn.Module):
         net = []
         for l, in_c, out_c, w, s, p in zip(layers, in_channels, out_channels, kernel_sizes, strides, padding):
 
-            net.append(get_conv_block(in_c, out_c, w, s, p))
+            net.append(get_conv1d_block(in_c, out_c, w, s, p))
 
         
         self.conv_layers = nn.Sequential(*net)
@@ -67,6 +67,9 @@ class PitchExtractor(nn.Module):
 
         return x
 
+class InstrumentClassifier(nn.Module):
+    def __init__(self, sampling_rate, model_size='tiny'):
+        super().__init__()
     
 
 
