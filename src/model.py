@@ -16,12 +16,34 @@ def get_conv1d_block(in_channels, out_channels, kernel_size, stride=1, padding=3
     return nn.Sequential(*net)
 
 
+def get_conv2d_block(in_channels, out_channels, kernel_size, stride=1, padding=32):
+    
+    net = []
+
+    net.append(nn.Conv1d(in_channels, out_channels, kernel_size, 
+                stride, padding, bias=False))
+
+    
+    net.append(nn.BatchNorm1d(out_channels,momentum=0.5))
+    net.append(nn.ReLU())
+    net.append(nn.MaxPool1d(2))
+    return nn.Sequential(*net)
+
+
+def get_mlp(in_size, hidden_size, n_layers):
+    channels = [in_size] + (n_layers) * [hidden_size]
+    net = []
+    for i in range(n_layers):
+        net.append(nn.Linear(channels[i], channels[i + 1]))
+        net.append(nn.LayerNorm(channels[i + 1]))
+        net.append(nn.ReLU())
+    return nn.Sequential(*net)
 
 
 
 
 class PitchExtractor(nn.Module):
-    def __init__(self, sampling_rate, model_size='tiny'):
+    def __init__(self, samplerate, model_size='tiny'):
         super().__init__()
 
         
@@ -53,7 +75,7 @@ class PitchExtractor(nn.Module):
         self.conv_layers = nn.Sequential(*net)
         
         self.classifier = nn.Sequential(
-            torch.nn.Linear(self.in_features, self.pitch_bins),
+            nn.Linear(self.in_features, self.pitch_bins),
             # torch.nn.Sigmoid()
         )
 
@@ -68,16 +90,48 @@ class PitchExtractor(nn.Module):
         return x
 
 class InstrumentClassifier(nn.Module):
-    def __init__(self, sampling_rate, model_size='tiny'):
+    # To use with Nsyth dataset
+    def __init__(self, samplerate, n_mfcc, input_length, n_classes, model_size='medium'):
         super().__init__()
+
+
+        capacity_multiplier = {
+            'small': 1, 'medium': 2, 'large': 4, 'large-shallow':4,
+        }[model_size]
+
+        self.input_length = input_length
+        self.n_classes = n_classes
+
+        self.gru_size = capacity_multiplier*128
+        
+        if capacity_multiplier=='large-shallow':
+            self.n_layers_mlp=1
+        else:
+            self.n_layers_mlp = 2
+
+        if capacity_multiplier=='large-shallow':
+            self.mlp_size = capacity_multiplier*16
+        else:
+            self.mlp_size = capacity_multiplier*64
+        
+        self.gru = nn.GRU(input_size=n_mfcc, hidden_size=self.gru_size, batch_first=True)
+
+        net = []
+        net.append(get_mlp(self.gru_size*self.input_length, self.mlp_size, self.n_layers_mlp))
+        net.append(nn.Linear(self.mlp_size,self.n_classes))
+        self.classifier = nn.Sequential(*net)
+
+    def forward(self, x):
+        x, _ = self.gru(x)
+        x = x.reshape(-1, self.gru_size*self.input_length)
+        x= self.classifier(x)
+
+        return x
     
 
 
 if __name__ == "__main__":
 
-    
-
-    
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using {device} device")
 
