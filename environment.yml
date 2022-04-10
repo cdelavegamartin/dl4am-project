@@ -8,6 +8,7 @@ dependencies:
   - numpy
   - pytorch::pytorch
   - pytorch::cudatoolkit=11.5
+  - pytorch::torchaudio
   - matplotlib
   - pandas
   - librosa
