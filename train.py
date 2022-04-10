@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 import os
 from time import gmtime, strftime
 import librosa
-from src.model import PitchExtractor, InstrumentClassifier
+from src.model import CombinedModel, PitchExtractor, InstrumentClassifier
 from utils.data import MdbStemSynthDataset, NsynthDataset
 from utils.data import preprocess_data_for_crepe, create_bins, pitch_to_activation
 
@@ -281,39 +281,39 @@ def train_combined_model(train_dataset='nsynth'):
     # device = "cpu"
     print(f"Using {device} device")
 
-    # print("Loading training dataset")
-    # nsynth_dataset_train = NsynthDataset("datasets/nsynth",split='train')
-    # print("Loading validation dataset")
-    # nsynth_dataset_valid = NsynthDataset("datasets/nsynth", split='valid')
+    print("Loading training dataset")
+    nsynth_dataset_train = NsynthDataset("datasets/nsynth",split='train')
+    print("Loading validation dataset")
+    nsynth_dataset_valid = NsynthDataset("datasets/nsynth", split='valid')
     print("Loading test dataset")
     nsynth_dataset_test = NsynthDataset("datasets/nsynth", split='test')
 
     
 
     model_sr = 16000
-    model_size='large-shallow'
-    n_mfcc=20
+    model_size='medium'
+    n_bins=360
     n_classes=11
+    input_length = 126
     
-    # model = InstrumentClassifier(samplerate=model_sr,n_mfcc=n_mfcc,
-    #                              input_length=126, n_classes=n_classes, model_size=model_size)
+    model = CombinedModel(samplerate=model_sr, n_classes=n_classes, n_bins=n_bins, input_length=input_length, model_size=model_size)
 
-    # model.to(device)
+    model.to(device)
 
-    # opt = torch.optim.Adam(model.parameters(), lr=1e-3)
-    # loss = torch.nn.BCEWithLogitsLoss()
+    opt = torch.optim.Adam(model.parameters(), lr=1e-3)
+    loss = torch.nn.BCEWithLogitsLoss()
 
-    # scheduler = torch.optim.lr_scheduler.ExponentialLR(opt, gamma=0.99, last_epoch=-1, verbose=True)
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(opt, gamma=0.99, last_epoch=-1, verbose=True)
 
-    writer = SummaryWriter(os.path.join("runs", "instclass", model_size, strftime("%Y-%m-%d_%H-%M-%S", gmtime())), purge_step=0, flush_secs=30)
+    writer = SummaryWriter(os.path.join("runs", "combined", model_size, strftime("%Y-%m-%d_%H-%M-%S", gmtime())), purge_step=0, flush_secs=30)
 
     epochs =200
-    batch_size = 500
+    batch_size = 50
 
-    # if len(nsynth_dataset_valid)%batch_size:
-    #     n_batch_valid= len(nsynth_dataset_valid)//batch_size+1
-    # else:
-    #     n_batch_valid= len(nsynth_dataset_valid)//batch_size
+    if len(nsynth_dataset_valid)%batch_size:
+        n_batch_valid= len(nsynth_dataset_valid)//batch_size+1
+    else:
+        n_batch_valid= len(nsynth_dataset_valid)//batch_size
 
     if len(nsynth_dataset_test)%batch_size:
         n_batch_test= len(nsynth_dataset_test)//batch_size+1
@@ -324,12 +324,10 @@ def train_combined_model(train_dataset='nsynth'):
 
     
     step = 0
-    
     val_counter = 0
-
     min_loss_valid = np.inf
 
-    multi_thread = True
+    multi_thread = False
     if multi_thread:
         num_workers=4
         pin_mem = True
@@ -337,76 +335,98 @@ def train_combined_model(train_dataset='nsynth'):
         num_workers=0
         pin_mem = False
 
-    # print("Loading training dataset")
-    # dataloader_train = DataLoader(nsynth_dataset_train, batch_size=batch_size,
-    #                     shuffle=True, num_workers=num_workers, pin_memory=pin_mem)
+    dataloader_train = DataLoader(nsynth_dataset_train, batch_size=batch_size,
+                        shuffle=True, num_workers=num_workers, pin_memory=pin_mem)
 
     
-    # dataloader_valid = DataLoader(nsynth_dataset_valid, batch_size=batch_size,
-    #                     shuffle=True, num_workers=num_workers, pin_memory=pin_mem)
+    dataloader_valid = DataLoader(nsynth_dataset_valid, batch_size=batch_size,
+                        shuffle=True, num_workers=num_workers, pin_memory=pin_mem)
 
     
-    dataloader_test = DataLoader(nsynth_dataset_test, batch_size=len(nsynth_dataset_test),
+    dataloader_test = DataLoader(nsynth_dataset_test, batch_size=batch_size,
                         shuffle=True, num_workers=num_workers, pin_memory=pin_mem)  
 
 
-    for batch in dataloader_test:
-            print(batch)
-            break
+    # for batch in dataloader_test:
+    #     print(type(batch))
+    #     specgram = batch['specgram']
+    #     target_pitch = batch['pitch']
+    #     target_instrument = batch['instrument']
+    #     pred_pitch, pred_instrument = model(specgram)
+    #     loss_pitch = loss(pred_pitch, target_pitch)
+    #     loss_instr = loss(pred_instrument, target_instrument)
+    #     loss_train = loss_train_pitch + loss_train_instr
+    #     print(f"Loss: {loss_train}")
+
+    #     break
 
     
 
-    # for epoch in tqdm(range(epochs)):
+    for epoch in tqdm(range(epochs)):
 
 
 
-    #     for batch in dataloader_train:
-    #         # print(batch)
+        for i_batch, batch in enumerate(dataloader_train):
+            # print(batch)
             
-    #         mfcc = batch['mfcc'].to(device)
-    #         target = batch['instrument'].to(device)
-    #         prediction = model(mfcc)
-    #         loss_train = loss(prediction,target)
-    #         writer.add_scalar("loss_train", loss_train.item(), step)
-    #         step += 1
-    #         # print(f"Loss: {output}")
-    #         opt.zero_grad()
-    #         loss_train.backward()
-    #         opt.step()
-    #         # print('todebug')
-            
+            specgram = batch['specgram'].to(device)
+            target_pitch = batch['pitch'].to(device)
+            target_instrument = batch['instrument'].to(device)
+            pred_pitch, pred_instrument = model(specgram)
+            loss_train_pitch = loss(pred_pitch, target_pitch)
+            loss_train_instr = loss(pred_instrument, target_instrument)
+            loss_train = input_length*loss_train_pitch + loss_train_instr
+            writer.add_scalar("loss_train_pitch", loss_train_pitch.item(), step)
+            writer.add_scalar("loss_train_instr", loss_train_instr.item(), step)
+            writer.add_scalar("loss_train", loss_train.item(), step)
+            step += 1
+            opt.zero_grad()
+            loss_train.backward()
+            opt.step()
 
+            # limit the number of batches we train on per epoch
+            if i_batch == 2*n_batch_valid:
+                break
+ 
+        writer.add_scalar("lr", scheduler.get_last_lr()[0], step)
+        scheduler.step()
+        
+        # validation
+        if not epoch % 5:
+            loss_valid = 0
+            loss_valid_pitch = 0
+            loss_valid_instr = 0
+            with torch.no_grad():
+                for batch in dataloader_valid:
+                    specgram = batch['specgram'].to(device)
+                    target_pitch = batch['pitch'].to(device)
+                    target_instrument = batch['instrument'].to(device)
+                    pred_pitch, pred_instrument = model(specgram)
+                    loss_valid_pitch += loss(pred_pitch, target_pitch)
+                    loss_valid_instr += loss(pred_instrument, target_instrument)
+                    
+
+
+                loss_valid_pitch /=n_batch_valid
+                loss_valid_instr /=n_batch_valid
+                loss_valid = input_length*loss_valid_pitch + loss_valid_instr
+                writer.add_scalar("loss_valid_pitch", loss_valid_pitch.item(), step)
+                writer.add_scalar("loss_valid_instr", loss_valid_instr.item(), step)                
+                writer.add_scalar("loss_valid", loss_valid.item(), step)
+
+                if min_loss_valid > loss_valid:
+                    print(f'Validation Loss Decreased({min_loss_valid:.6f}--->{loss_valid:.6f}) \t Saving The Model')
+                    min_loss_valid = loss_valid
+                    # Saving State Dict
+                    torch.save(model.state_dict(), f'trained_models/combined/{model_size}/model.pth')
+                    val_counter=0
+                else:
+                    val_counter += 1
+
+        if val_counter>5:
+            break
 
         
-        
-    #     writer.add_scalar("lr", scheduler.get_last_lr()[0], step)
-    #     scheduler.step()
-        
-    #     # validation
-    #     if not epoch % 5:
-    #         loss_valid = 0
-    #         with torch.no_grad():
-    #             for batch in dataloader_valid:
-    #                 mfcc = batch['mfcc'].to(device)
-    #                 target = batch['instrument'].to(device)
-    #                 prediction = model(mfcc)
-    #                 loss_valid += loss(prediction,target)
-
-                
-    #             loss_valid /=n_batch_valid
-    #             writer.add_scalar("loss_valid", loss_valid.item(), step)
-
-    #             if min_loss_valid > loss_valid:
-    #                 print(f'Validation Loss Decreased({min_loss_valid:.6f}--->{loss_valid:.6f}) \t Saving The Model')
-    #                 min_loss_valid = loss_valid
-    #                 # Saving State Dict
-    #                 torch.save(model.state_dict(), f'trained_models/instclass/{model_size}/model.pth')
-    #                 val_counter=0
-    #             else:
-    #                 val_counter += 1
-
-    #     if val_counter>5:
-    #         break
 
     # # evaluate model
     # torch.cuda.empty_cache() 
