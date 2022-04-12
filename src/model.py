@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-def get_conv1d_block(in_channels, out_channels, kernel_size, stride=1, padding=32):
+def get_conv1d_block(in_channels, out_channels, kernel_size, stride=1, padding=32,dropout=False):
     
     net = []
     
@@ -14,10 +14,12 @@ def get_conv1d_block(in_channels, out_channels, kernel_size, stride=1, padding=3
     net.append(nn.BatchNorm1d(out_channels,momentum=0.5))
     net.append(nn.ReLU())
     net.append(nn.MaxPool1d(2))
+    if dropout:
+        net.append(nn.Dropout2d(p=0.25))
     return nn.Sequential(*net)
 
 
-def get_conv2d_block(in_channels, out_channels, kernel_size, stride=(1,1), padding=(0,0,31,32)):
+def get_conv2d_block(in_channels, out_channels, kernel_size, stride=(1,1), padding=(0,0,31,32),dropout=False):
     
     net = []
     net.append(nn.ConstantPad2d(padding=padding,value=0.0))
@@ -28,23 +30,27 @@ def get_conv2d_block(in_channels, out_channels, kernel_size, stride=(1,1), paddi
     net.append(nn.BatchNorm2d(out_channels,momentum=0.5))
     net.append(nn.ReLU())
     net.append(nn.MaxPool2d(kernel_size=(2,1)))
+    if dropout:
+        net.append(nn.Dropout2d(p=0.25))
     return nn.Sequential(*net)
 
 
-def get_mlp(in_size, hidden_size, n_layers):
+def get_mlp(in_size, hidden_size, n_layers, dropout=False):
     channels = [in_size] + (n_layers) * [hidden_size]
     net = []
     for i in range(n_layers):
         net.append(nn.Linear(channels[i], channels[i + 1]))
         net.append(nn.LayerNorm(channels[i + 1]))
         net.append(nn.ReLU())
+        if dropout:
+            net.append(nn.Dropout(p=0.5))
     return nn.Sequential(*net)
 
 
 
 
 class PitchExtractor(nn.Module):
-    def __init__(self, samplerate, model_size='tiny'):
+    def __init__(self, samplerate, n_bins=360, model_size='tiny', dropout=False):
         super().__init__()
 
         
@@ -65,13 +71,13 @@ class PitchExtractor(nn.Module):
         strides = [(4,)] + 5 * [(1,)]
         padding = [(256,)] + 5 * [(32,)]
         self.in_features = capacity_multiplier*64
-        self.pitch_bins=360
+        self.pitch_bins=n_bins
         
         # Convolutional layer blocks
         net = []
         for l, in_c, out_c, w, s, p in zip(layers, in_channels, out_channels, kernel_sizes, strides, padding):
 
-            net.append(get_conv1d_block(in_c, out_c, w, s, p))
+            net.append(get_conv1d_block(in_c, out_c, w, s, p, dropout=dropout))
 
         
         self.conv_layers = nn.Sequential(*net)
@@ -85,6 +91,7 @@ class PitchExtractor(nn.Module):
         
 
     def forward(self, x):
+        x = x.unsqueeze(1)
         x = self.conv_layers(x)
         x = x.reshape(-1, self.in_features)
         x= self.classifier(x)
@@ -93,7 +100,7 @@ class PitchExtractor(nn.Module):
 
 class InstrumentClassifier(nn.Module):
     # To use with Nsyth dataset
-    def __init__(self, samplerate, n_mfcc, input_length, n_classes, model_size='medium'):
+    def __init__(self, samplerate, n_mfcc, input_length, n_classes, model_size='medium', dropout=False):
         super().__init__()
 
 
@@ -119,7 +126,7 @@ class InstrumentClassifier(nn.Module):
         self.gru = nn.GRU(input_size=n_mfcc, hidden_size=self.gru_size, batch_first=True)
 
         net = []
-        net.append(get_mlp(self.gru_size*self.input_length, self.mlp_size, self.n_layers_mlp))
+        net.append(get_mlp(self.gru_size*self.input_length, self.mlp_size, self.n_layers_mlp, dropout=dropout))
         net.append(nn.Linear(self.mlp_size,self.n_classes))
         self.classifier = nn.Sequential(*net)
 
@@ -133,7 +140,7 @@ class InstrumentClassifier(nn.Module):
 
 class CombinedModel(nn.Module):
     # To use with Nsyth dataset
-    def __init__(self, samplerate, n_classes, n_bins, input_length, model_size='medium'):
+    def __init__(self, samplerate, n_classes, n_bins, input_length, model_size='medium', dropout=False):
         super().__init__()
 
         capacity_multiplier = {
@@ -163,7 +170,7 @@ class CombinedModel(nn.Module):
         net = []
         for l, in_c, out_c, w, s, p in zip(layers, in_channels, out_channels, kernel_sizes, strides, padding):
 
-            net.append(get_conv2d_block(in_c, out_c, w, s, p))
+            net.append(get_conv2d_block(in_c, out_c, w, s, p, dropout=dropout))
 
         
         self.conv_layers = nn.Sequential(*net)
@@ -183,9 +190,9 @@ class CombinedModel(nn.Module):
     def forward(self, x):
         x = x.unsqueeze(1)
         # print('unsq input',x.shape)
-        # x = self.conv_layers(x)
-        for conv in self.conv_layers:
-            x = conv(x)
+        x = self.conv_layers(x)
+        # for conv in self.conv_layers:
+        #     x = conv(x)
             # print("after conv",x.shape)
 
         # print("after all conv",x.shape)
@@ -233,12 +240,6 @@ if __name__ == "__main__":
         print("pytorch_total_params",sum(p.numel() for p in model.parameters()))
         print("pytorch_total_params",sum(p.numel() for p in pitch_model.parameters()))
         # model.to(device)
-
-
-        t = torch.cuda.get_device_properties(0).total_memory
-        r = torch.cuda.memory_reserved(0)
-        a = torch.cuda.memory_allocated(0)
-        f = r-a 
 
         
         p_pitch, p_inst = model(input)
