@@ -8,35 +8,38 @@ import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
 import librosa
 
-def preprocess_data_for_crepe(stem, hop=0.01):
-    window_size = 1024
-    hop_length_samples = int(hop*stem['samplerate'])
-    audio = stem['audio']
-    time_annot = stem['pitch'][:,0]
-    pitch_annot  = stem['pitch'][:,1]
-    time_annot_samples = (time_annot*stem['samplerate']).astype(int)
-    # print(f'audio shape is: {audio.shape}')
-    total_frames = 1 + int(stem['audio'].shape[0]//hop_length_samples)
-    # print(f'total_frames is: {total_frames}')
+def preprocess_sample_for_crepe(audio, pitch, samplerate=16000, hop=0.01, window_size=1024, sample_start_s=0, n_frames=200):
+    
+    sample_start_samples = int(sample_start_s*samplerate)
+    hop_length_samples = int(hop*samplerate)
+    time_annot = pitch[:,0]
+    pitch_annot  = pitch[:,1]
+    time_annot_samples = (time_annot*samplerate).astype(int)
     frame_list = []
     prediction_list = []
 
     # pad the audio
     audio = np.pad(audio,(window_size//2, window_size//2))
     # print(audio.shape)
-    for idf in range(total_frames):
-        start  = idf*hop_length_samples
+    start = sample_start_samples
+    while len(prediction_list) < n_frames:
+        end = start+window_size
+        if end > len(audio):
+            start=0
+            continue
         f0 = pitch_annot[np.argmin(np.abs(time_annot_samples-start))]
         if f0 <10:
+            start += hop_length_samples
             continue
 
-        frame_list.append(np.expand_dims(audio[start:start+window_size],0))
-        prediction_list.append(pitch_annot[np.argmin(np.abs(time_annot_samples-start))])
+        frame_list.append(np.expand_dims(audio[start:end],0))
+        prediction_list.append(f0)
+        start += hop_length_samples
 
     frames = torch.from_numpy(np.vstack(frame_list))
     # print(f"frames.shape: {frames.shape}")
-    predictions = torch.from_numpy(np.array(prediction_list).reshape(-1,1))
-    # print(f"predictions.shape: {predictions.shape}")
+    pitches = torch.from_numpy(np.array(prediction_list))
+    # print(f"pitches.shape: {pitches.shape}")
     frames_mean = torch.mean(frames,dim=1,keepdim=True)
     # print(f"frames_mean.shape: {frames_mean.shape}")
     frames_std = torch.std(frames,dim=1,keepdim=True)
@@ -46,7 +49,7 @@ def preprocess_data_for_crepe(stem, hop=0.01):
     # print(f"frames norm mean: {frames.max()}, frames norm min: {frames.min()}")
     
 
-    return frames, predictions    
+    return frames, pitches    
 
 def freq_to_cents(frequency):
     cents = 1200*torch.log2(frequency/10.0)
@@ -74,16 +77,24 @@ def pitch_to_activation(frequencies, bins):
 
 
 class MdbStemSynthDataset(Dataset):
-    def __init__(self, wav_dir, annot_dir, sr=None, transform=None):
+    def __init__(self, root_dir, sr=None, sample_start_s=None, n_frames=200, hop_s=0.01, transform=None):
 
-        self.wav_dir = wav_dir
-        self.annot_dir = annot_dir
+        self.root_dir = root_dir
+        self.wav_dir = os.path.join(root_dir, "audio_stems")
+        self.annot_dir = os.path.join(root_dir, "annotation_stems")
         self.sr = sr
-        wav_count = sum(1 for file in os.listdir(wav_dir) if (file.endswith(".wav") and not file.startswith("._")))
-        annot_count = sum(1 for file in os.listdir(annot_dir) if file.endswith(".csv"))
+        
+        self.n_frames = n_frames
+        self.sample_start_s = sample_start_s
+        
+        self.hop_s =hop_s
+        self.bins = create_bins(f_min=32.7, f_max=1975.5, n_bins=360)
+        
+        wav_count = sum(1 for file in os.listdir(self.wav_dir) if (file.endswith(".wav") and not file.startswith("._")))
+        annot_count = sum(1 for file in os.listdir(self.annot_dir) if file.endswith(".csv"))
 
         if wav_count == annot_count:
-            self.data_fnames = [os.path.splitext(file)[0]  for file in os.listdir(annot_dir) if file.endswith(".csv")]
+            self.data_fnames = [os.path.splitext(file)[0]  for file in os.listdir(self.annot_dir) if file.endswith(".csv")]
         else:
             print("number of audio files and annotations do not match")
 
@@ -95,12 +106,31 @@ class MdbStemSynthDataset(Dataset):
     def __getitem__(self,index):
         
         name = self.data_fnames[index]
-        audio, samplerate = librosa.load(os.path.join(self.wav_dir, name)+".wav",sr=self.sr)
+        audio, samplerate = librosa.load(os.path.join(self.wav_dir, name+".wav"),sr=self.sr)
+        # audio, samplerate = torchaudio.load(os.path.join(self.wav_dir, name+".wav"))
+        # if samplerate != self.sr:
+        #     audio = torchaudio.functional.resample(audio, samplerate, self.sr)
+        #     samplerate = self.sr
+            
         pitch_annotation= pd.read_csv(os.path.join(self.annot_dir, name)+".csv",header=None).to_numpy()
+        
+        # if sample_start_s is not fixed, each sample starts at a random location in the audio stem
+        if self.sample_start_s is None:
+            start_s = np.random.rand()*len(audio)/samplerate
+        else:
+            start_s = self.sample_start_s
+        
+        frames, pitches = preprocess_sample_for_crepe(audio, pitch_annotation, 
+                                                      samplerate=samplerate, hop=self.hop_s, 
+                                                      window_size=1024, 
+                                                      sample_start_s=start_s, 
+                                                      n_frames=self.n_frames)
 
         # print(wave.open(os.path.join(self.wav_dir, name)+".wav").getframerate())
+        
+        pitch_one_hot = pitch_to_activation(pitches, self.bins)
 
-        sample = {'name': name, 'audio': audio, 'samplerate': samplerate, 'pitch': pitch_annotation}
+        sample = {'name': name, 'samplerate': samplerate, 'frames':frames, 'pitch': pitch_one_hot}
         
         return sample
 
@@ -189,16 +219,17 @@ torchaudio.transforms
 
 if __name__ == "__main__":
 
-    dataset='nsynth'
+    dataset='mdb'
 
     if dataset=='mdb':
 
-        mdb_dataset = MdbStemSynthDataset("datasets/MDB-stem-synth/audio_stems","datasets/MDB-stem-synth/annotation_stems")
+        mdb_dataset = MdbStemSynthDataset(root_dir="/import/c4dm-datasets/MDB-stem-synth/",
+                                          sr=16000, sample_start_s=50, n_frames=2, hop_s=0.01)
         
         dat = mdb_dataset[0]
 
         print(type(dat['pitch']), dat['pitch'].shape)
-        print(type(dat['audio']), dat['audio'].shape)
+        print(type(dat['frames']), dat['frames'].shape)
         
 
     elif dataset=='nsynth':
