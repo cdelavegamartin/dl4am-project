@@ -221,8 +221,10 @@ def train_pitch(dataset_dir="datasets/MDB-stem-synth/", model_name='pitchext', m
         if val_counter>10:
             break
     
-    model.train()
-    writer.add_graph(model, datasets[2][0])
+    graph = False
+    if graph: 
+        model.train()
+        writer.add_graph(model, datasets[2][0])
 
 
 def train_instrument_classifier(dataset_dir="datasets/nsynth/", model_name='instclass', model_size='medium', dropout=False, gpu_id=""):
@@ -340,8 +342,10 @@ def train_instrument_classifier(dataset_dir="datasets/nsynth/", model_name='inst
         if val_counter>10:
             break
 
-    model.train()
-    writer.add_graph(model, datasets[2][0])
+    graph = False
+    if graph: 
+        model.train()
+        writer.add_graph(model, datasets[2][0])
     
     
 def train_combined_model(dataset_dir='datasets/nsynth', model_name='combined', model_size='small', dropout=False, gpu_id=""):
@@ -469,8 +473,10 @@ def train_combined_model(dataset_dir='datasets/nsynth', model_name='combined', m
         if val_counter>10:
             break
         
-    model.train()
-    writer.add_graph(model, datasets[2][0])
+    graph = False
+    if graph: 
+        model.train()
+        writer.add_graph(model, datasets[2][0])
 
     
 
