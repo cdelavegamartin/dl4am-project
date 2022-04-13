@@ -198,7 +198,7 @@ class NsynthDataset(Dataset):
         instrument_one_hot = torch.zeros(len(self.instrument_id_map))
         instrument_one_hot[instrument] = 1
         instrument_one_hot = instrument_one_hot
-        sample = {'name': name, 'audio': audio, 'samplerate': samplerate,
+        sample = {'name': name, 'samplerate': samplerate,
                   'pitch': pitch_one_hot, 'instrument': instrument_one_hot, 'mfcc':mfcc, 'specgram':specgram}
 
         return sample
