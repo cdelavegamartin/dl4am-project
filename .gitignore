@@ -111,3 +111,4 @@ datasets/
 #  outputs
 trained_models/
 runs/
+eval/
