@@ -15,5 +15,8 @@ dependencies:
   - resampy
   - tqdm
   - tensorboard
+  - crepe
+  - scikit-learn
+  - mir_eval
   - pip:
     - torch_tb_profiler
