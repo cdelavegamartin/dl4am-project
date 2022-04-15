@@ -17,11 +17,11 @@ from utils.data import MdbStemSynthDataset, NsynthDataset
 
 
 
-def load_nsynth_dataset(dataset_dir):
+def load_nsynth_dataset(dataset_dir, comb_mode=True):
     
-    dataset_train = NsynthDataset(dataset_dir,split='train')
-    dataset_valid = NsynthDataset(dataset_dir, split='valid')
-    dataset_test = NsynthDataset(dataset_dir, split='test')
+    dataset_train = NsynthDataset(dataset_dir,split='train', comb_mode=comb_mode)
+    dataset_valid = NsynthDataset(dataset_dir, split='valid', comb_mode=comb_mode)
+    dataset_test = NsynthDataset(dataset_dir, split='test', comb_mode=comb_mode)
     
     return dataset_train, dataset_valid, dataset_test
 
@@ -49,9 +49,8 @@ def create_dataloaders(datasets, batch_size, multi_thread=True, num_workers=10):
     
     dataset_train, dataset_valid, dataset_test = datasets
 
-    multi_thread = True
     if multi_thread:
-        num_workers=10
+        num_workers=5
         pin_mem = True
     else:
         num_workers=0
@@ -96,7 +95,7 @@ def train_pitch(dataset_dir="datasets/MDB-stem-synth/", model_name='pitchext', m
     
 
     # Optimizer (with lr scheduler) and loss
-    opt = torch.optim.Adam(model.parameters(), lr=5e-3)
+    opt = torch.optim.Adam(model.parameters(), lr=5e-4)
     loss = torch.nn.BCEWithLogitsLoss()
     scheduler = torch.optim.lr_scheduler.ExponentialLR(opt, gamma=0.99, last_epoch=-1, verbose=True)
 
@@ -116,7 +115,7 @@ def train_pitch(dataset_dir="datasets/MDB-stem-synth/", model_name='pitchext', m
     datasets = load_mdb_dataset(dataset_dir, train_split=0.8, valid_split=0.1, seed=rn_seed)
     dataloader_train, dataloader_valid, dataloader_test = create_dataloaders(datasets, 
                                                                              batch_size, 
-                                                                             multi_thread=True, num_workers=10)
+                                                                             multi_thread=True, num_workers=4)
     
     # Save random seed to tensorboard for reuse in eval
     writer.add_scalar("Seed", rn_seed, 0)
@@ -234,7 +233,6 @@ def train_instrument_classifier(dataset_dir="datasets/nsynth/", model_name='inst
     device = "cuda" if torch.cuda.is_available() else "cpu"
     # device = "cpu"
     print(f"Using {device} device")
-    
     if dropout:
         model_name=f"{model_name}-dropout"
     
@@ -266,10 +264,10 @@ def train_instrument_classifier(dataset_dir="datasets/nsynth/", model_name='inst
     # Training parameters
     epochs = 300
     batch_size = 6000
-    datasets = load_nsynth_dataset(dataset_dir)
+    datasets = load_nsynth_dataset(dataset_dir, comb_mode=False)
     dataloader_train, dataloader_valid, dataloader_test = create_dataloaders(datasets, 
                                                                              batch_size, 
-                                                                             multi_thread=True, num_workers=10)
+                                                                             multi_thread=True, num_workers=4)
     
 
     # Used for averaging validation loss
@@ -387,7 +385,7 @@ def train_combined_model(dataset_dir='datasets/nsynth', model_name='combined', m
     # Training parameters
     epochs = 200
     batch_size = 40
-    datasets = load_nsynth_dataset(dataset_dir)
+    datasets = load_nsynth_dataset(dataset_dir, comb_mode=True)
     dataloader_train, dataloader_valid, dataloader_test = create_dataloaders(datasets, 
                                                                              batch_size, 
                                                                              multi_thread=True, num_workers=10)
