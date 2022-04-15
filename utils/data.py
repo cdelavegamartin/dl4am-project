@@ -4,8 +4,7 @@ import torch
 import torchaudio
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 import librosa
 
 def preprocess_sample_for_crepe(audio, pitch, samplerate=16000, hop=0.01, window_size=1024, sample_start_s=0, n_frames=200):
@@ -136,15 +135,17 @@ class MdbStemSynthDataset(Dataset):
 
 
 class NsynthDataset(Dataset):
-    def __init__(self, root_dir, split='test', sr=None, pitch_notation='hz', transform=None):
+    def __init__(self, root_dir, split='test', sr=None, pitch_notation='hz', comb_mode=True):
 
         self.root_dir = root_dir
         self.split = split
         self.sr = sr
         self.pitch_notation = pitch_notation
+        self.mode = comb_mode
         self.split_dir = os.path.join(self.root_dir,f"nsynth-{split}")
         self.json_data = pd.read_json(os.path.join(self.split_dir,"examples.json")).T
 
+        self.n_fft = 2048
         self.hop_length =512
         self.bins = create_bins(f_min=32.7, f_max=1975.5, n_bins=360)
 
@@ -169,53 +170,41 @@ class NsynthDataset(Dataset):
         
         sample_data = self.json_data.iloc[index]
         name = sample_data.note_str
-        pitch_midi = sample_data.pitch
-        instrument = sample_data.instrument_family
-        if self.pitch_notation=='hz':
-            pitch_hz = 2**((pitch_midi-69)/12)*440
-            pitch_annotation = torch.from_numpy(np.asarray([0.0,pitch_hz]).reshape(1,-1))
-        else:
-            print("pitch notation is not set or invalid for the dataset")
+        
 
-        pitch_one_hot = pitch_to_activation(torch.tensor(pitch_hz), self.bins)
-
-        # audio, samplerate = librosa.load(os.path.join(self.split_dir, "audio", name+".wav"),sr=self.sr)
         audio, samplerate = torchaudio.load(os.path.join(self.split_dir, "audio", name+".wav"))
-        # TODO: This needs to be made into a transform that can be manipulated from outside
-        mfcc_transform = torchaudio.transforms.MFCC(n_mfcc=20, log_mels=True,
-                                                    melkwargs={'hop_length':512, 'n_fft':2048} )
-
-        specgram_transform = torchaudio.transforms.Spectrogram(n_fft=2048, hop_length=512)
         audio = audio.squeeze(0)
-        mfcc = torch.t(mfcc_transform(audio))
-        specgram = specgram_transform(audio)[1:,:]
-
         
-        n_frames= len(audio)//self.hop_length+1
-        pitch_one_hot = pitch_to_activation(torch.tensor(n_frames * [(pitch_hz,)]), self.bins)
-        
-
+        instrument = sample_data.instrument_family
         instrument_one_hot = torch.zeros(len(self.instrument_id_map))
         instrument_one_hot[instrument] = 1
-        instrument_one_hot = instrument_one_hot
-        sample = {'name': name, 'samplerate': samplerate,
-                  'pitch': pitch_one_hot, 'instrument': instrument_one_hot, 'mfcc':mfcc, 'specgram':specgram}
-
-        return sample
-
-
-class ToMFCC(object):
-    """Convert ndarrays in sample to Tensors. Only audio"""
-
-    def __call__(self, sample):
-
-        sample_mod=sample
-        print('Hey there, MFCC')
         
-        return sample_mod
+        
+        
+        if self.mode:
+            pitch_midi = sample_data.pitch
+            
+            if self.pitch_notation=='hz':
+                pitch_hz = 2**((pitch_midi-69)/12)*440
+                # pitch_annotation = torch.from_numpy(np.asarray([0.0,pitch_hz]).reshape(1,-1))
+            else:
+                print("pitch notation is not set or invalid for the dataset")
+            specgram_transform = torchaudio.transforms.Spectrogram(n_fft=self.n_fft, hop_length=self.hop_length)
+            specgram = specgram_transform(audio)[1:,:]        
+            n_frames= len(audio)//self.hop_length+1
+            pitch_one_hot = pitch_to_activation(torch.tensor(n_frames * [(pitch_hz,)]), self.bins)
+            
+            return {'name': name, 'samplerate': samplerate, 'specgram':specgram, 
+                    'pitch': pitch_one_hot, 'instrument': instrument_one_hot}
+        
+        else:
+            mfcc_transform = torchaudio.transforms.MFCC(n_mfcc=20, log_mels=True,
+                                                    melkwargs={'hop_length':self.hop_length, 'n_fft':self.n_fft} )
+            mfcc = torch.t(mfcc_transform(audio))
+
+            return {'name': name, 'samplerate': samplerate, 'mfcc':mfcc, 'instrument': instrument_one_hot}
 
 
-torchaudio.transforms
 
 if __name__ == "__main__":
 
@@ -234,12 +223,10 @@ if __name__ == "__main__":
 
     elif dataset=='nsynth':
 
-        nsynth_dataset = NsynthDataset("datasets/nsynth",transform=ToMFCC())
+        nsynth_dataset = NsynthDataset("datasets/nsynth")
 
         dat = nsynth_dataset[0]
         
-        
-        print("audio", type(dat['audio']), dat['audio'].shape)
         print("inst", type(dat['instrument']), dat['instrument'].shape, dat['instrument'])
         print("mfcc", type(dat['mfcc']), dat['mfcc'].shape)
         print("pitch", type(dat['pitch']), dat['pitch'].shape)
