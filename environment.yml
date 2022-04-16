@@ -20,3 +20,4 @@ dependencies:
   - mir_eval
   - pip:
     - torch_tb_profiler
+    - netron
