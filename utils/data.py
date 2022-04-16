@@ -16,6 +16,7 @@ def preprocess_sample_for_crepe(audio, pitch, samplerate=16000, hop=0.01, window
     time_annot_samples = (time_annot*samplerate).astype(int)
     frame_list = []
     prediction_list = []
+    time_list=[]
 
     # pad the audio
     audio = np.pad(audio,(window_size//2, window_size//2))
@@ -33,11 +34,13 @@ def preprocess_sample_for_crepe(audio, pitch, samplerate=16000, hop=0.01, window
 
         frame_list.append(np.expand_dims(audio[start:end],0))
         prediction_list.append(f0)
+        time_list.append(start/samplerate)
         start += hop_length_samples
 
     frames = torch.from_numpy(np.vstack(frame_list))
     # print(f"frames.shape: {frames.shape}")
     pitches = torch.from_numpy(np.array(prediction_list))
+    timestamps = torch.from_numpy(np.array(time_list))
     # print(f"pitches.shape: {pitches.shape}")
     frames_mean = torch.mean(frames,dim=1,keepdim=True)
     # print(f"frames_mean.shape: {frames_mean.shape}")
@@ -48,12 +51,16 @@ def preprocess_sample_for_crepe(audio, pitch, samplerate=16000, hop=0.01, window
     # print(f"frames norm mean: {frames.max()}, frames norm min: {frames.min()}")
     
 
-    return frames, pitches    
+    return frames, pitches, timestamps    
 
-def freq_to_cents(frequency):
-    cents = 1200*torch.log2(frequency/10.0)
+def freq_to_cents(frequency, f_ref=10.0):
+    cents = 1200*torch.log2(frequency/f_ref)
 
     return cents
+def cents_to_freq(cents, f_ref=10.0):
+    frequency = f_ref*2**(cents/1200)
+
+    return frequency
 
 def create_bins(f_min=32.7, f_max=1975.5, n_bins=360):
     cents_min = freq_to_cents(torch.tensor(f_min))
@@ -67,12 +74,27 @@ def create_bins(f_min=32.7, f_max=1975.5, n_bins=360):
 def pitch_to_activation(frequencies, bins):
     """Frequencies should be shape (total_frames,1)"""
     cents = freq_to_cents(frequencies)
+    # print("In pitch to act, cents min: ", torch.min(cents), "cents max: ", torch.max(cents))
+    
     # print(f"cents: {cents}")
     # activations should be shape (total_frames,n_bins)
     bins = bins.reshape(1,-1)
     cents = cents.reshape(-1,1)
     activation = torch.exp(-(bins.expand(cents.shape[0],bins.shape[1])-cents.expand(cents.shape[0],bins.shape[1]))**2/(2*25**2))
+    # print("In pitch to act, activation min: ", torch.min(activation), "activation max: ", torch.max(activation))
     return activation
+
+def activation_to_pitch(activation, bins, n_bins_win=10):
+    """activations should be shape (total_frames,n_bins)"""
+    bin_max_i = torch.argmax(activation, dim=1, keepdim=True)
+    confidence = bin_max_i
+    
+    
+    bins = bins.reshape(1,-1)
+    cents = torch.sum(activation*bins.expand(activation.shape[0],bins.shape[1]), dim=1)/torch.sum(activation, dim=1) 
+    # frequencies = cents_to_freq(cents)
+    
+    return cents
 
 
 class MdbStemSynthDataset(Dataset):
@@ -112,6 +134,7 @@ class MdbStemSynthDataset(Dataset):
         #     samplerate = self.sr
             
         pitch_annotation= pd.read_csv(os.path.join(self.annot_dir, name)+".csv",header=None).to_numpy()
+        # print("In Dataset get, Pitch annotation contains Nan: ", np.isnan(pitch_annotation).any())
         
         # if sample_start_s is not fixed, each sample starts at a random location in the audio stem
         if self.sample_start_s is None:
@@ -119,17 +142,19 @@ class MdbStemSynthDataset(Dataset):
         else:
             start_s = self.sample_start_s
         
-        frames, pitches = preprocess_sample_for_crepe(audio, pitch_annotation, 
+        frames, pitches, timestamps = preprocess_sample_for_crepe(audio, pitch_annotation, 
                                                       samplerate=samplerate, hop=self.hop_s, 
                                                       window_size=1024, 
                                                       sample_start_s=start_s, 
                                                       n_frames=self.n_frames)
 
+        # print("In Dataset get, pitches contains Nan: ", torch.isnan(pitches).any())
+        # print("In Dataset get, pitches min: ", torch.min(pitches), "pitches max: ", torch.max(pitches))
         # print(wave.open(os.path.join(self.wav_dir, name)+".wav").getframerate())
         
         pitch_one_hot = pitch_to_activation(pitches, self.bins)
 
-        sample = {'name': name, 'samplerate': samplerate, 'frames':frames, 'pitch': pitch_one_hot}
+        sample = {'name': name, 'samplerate': samplerate, 'frames':frames, 'pitch': pitch_one_hot, 'time':timestamps}
         
         return sample
 
