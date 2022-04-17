@@ -152,7 +152,7 @@ def evaluate_pitch(trained_model, dataset_dir='datasets/MDB-stem-synth/', gpu_id
     
     model_size = model_path.parents[0].name
     model_name = model_path.parents[1].name
-    eval_out_dir = pathlib.Path(pathlib.Path(__file__).parent, "eval-train", model_name, model_size, model_path.name.strip('.pth'))
+    eval_out_dir = pathlib.Path(pathlib.Path(__file__).parent, "eval", model_name, model_size, model_path.name.strip('.pth'))
     eval_out_dir.mkdir(parents=True, exist_ok=True) 
     # print(model_path.name.strip('.pth'))
     # print(eval_out_dir)
@@ -166,7 +166,7 @@ def evaluate_pitch(trained_model, dataset_dir='datasets/MDB-stem-synth/', gpu_id
         return
     
     # load test dataset
-    dataset, _, _ = load_mdb_dataset(dataset_dir, train_split=0.8, valid_split=0.1, seed=38)
+    _, _, dataset = load_mdb_dataset(dataset_dir, train_split=0.8, valid_split=0.1, seed=38)
 
     
     # Initialize model
@@ -215,6 +215,7 @@ def evaluate_pitch(trained_model, dataset_dir='datasets/MDB-stem-synth/', gpu_id
             pitch_true.extend(activation_to_pitch(target, pitch_bins).detach().tolist())
             # print("Pitch true contains Nan: ", np.isnan(np.array(pitch_true)).any())
             pitch_pred.extend(activation_to_pitch(prediction, pitch_bins).detach().tolist())
+            # print("dtypes ", f"target.dtype={target.dtype}", f"prediction.dtype={prediction.dtype}")
             loss_test += loss(prediction,target)
             
             if i_batch==n_batch:
