@@ -39,8 +39,8 @@ def preprocess_sample_for_crepe(audio, pitch, samplerate=16000, hop=0.01, window
 
     frames = torch.from_numpy(np.vstack(frame_list))
     # print(f"frames.shape: {frames.shape}")
-    pitches = torch.from_numpy(np.array(prediction_list))
-    timestamps = torch.from_numpy(np.array(time_list))
+    pitches = torch.from_numpy(np.array(prediction_list, dtype=np.float32))
+    timestamps = torch.from_numpy(np.array(time_list, dtype=np.float32))
     # print(f"pitches.shape: {pitches.shape}")
     frames_mean = torch.mean(frames,dim=1,keepdim=True)
     # print(f"frames_mean.shape: {frames_mean.shape}")
@@ -127,7 +127,7 @@ class MdbStemSynthDataset(Dataset):
     def __getitem__(self,index):
         
         name = self.data_fnames[index]
-        audio, samplerate = librosa.load(os.path.join(self.wav_dir, name+".wav"),sr=self.sr)
+        audio, samplerate = librosa.load(os.path.join(self.wav_dir, name+".wav"),sr=self.sr, dtype=np.float32)
         # audio, samplerate = torchaudio.load(os.path.join(self.wav_dir, name+".wav"))
         # if samplerate != self.sr:
         #     audio = torchaudio.functional.resample(audio, samplerate, self.sr)
