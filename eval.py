@@ -183,7 +183,7 @@ def evaluate_pitch(trained_model, dataset_dir='datasets/MDB-stem-synth/', gpu_id
     # print(list(dataset.instrument_id_map.keys())[list(dataset.instrument_id_map.values()).index(0)])
     
     # Loss function
-    loss = torch.nn.BCEWithLogitsLoss()
+    loss = torch.nn.BCELoss()
     
     # Eval parameters
     # batch_size = len(dataset)
@@ -328,7 +328,7 @@ def evaluate_instclass(trained_model, dataset_dir='datasets/nsynth/', gpu_id="")
     # print(list(dataset.instrument_id_map.keys())[list(dataset.instrument_id_map.values()).index(0)])
     
     # Loss function
-    loss = torch.nn.BCEWithLogitsLoss()
+    loss = torch.nn.BCELoss()
     
     # Eval parameters
     batch_size = len(dataset)
@@ -456,7 +456,7 @@ def evaluate_combined(trained_model, dataset_dir='datasets/nsynth/', gpu_id="", 
     # print(list(dataset.instrument_id_map.keys())[list(dataset.instrument_id_map.values()).index(0)])
     
     # Loss function
-    loss = torch.nn.BCEWithLogitsLoss()
+    loss = torch.nn.BCELoss()
     
     # Eval parameters
     # batch_size = len(dataset)
