@@ -196,7 +196,7 @@ def evaluate_pitch(trained_model, dataset_dir='datasets/MDB-stem-synth/', gpu_id
     else:
         n_batch= len(dataset)//batch_size
     
-    n_batch = 5
+    # n_batch = 5
     
     loss_test = 0
     pitch_true = []
@@ -218,8 +218,8 @@ def evaluate_pitch(trained_model, dataset_dir='datasets/MDB-stem-synth/', gpu_id
             # print("dtypes ", f"target.dtype={target.dtype}", f"prediction.dtype={prediction.dtype}")
             loss_test += loss(prediction,target)
             
-            if i_batch==n_batch:
-                break
+            # if i_batch==n_batch:
+            #     break
             
             
         loss_test /=n_batch
