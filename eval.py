@@ -152,7 +152,7 @@ def evaluate_pitch(trained_model, dataset_dir='datasets/MDB-stem-synth/', gpu_id
     
     model_size = model_path.parents[0].name
     model_name = model_path.parents[1].name
-    eval_out_dir = pathlib.Path(pathlib.Path(__file__).parent, "eval", model_name, model_size, model_path.name.strip('.pth'))
+    eval_out_dir = pathlib.Path(pathlib.Path(__file__).parent, "eval-train", model_name, model_size, model_path.name.strip('.pth'))
     eval_out_dir.mkdir(parents=True, exist_ok=True) 
     # print(model_path.name.strip('.pth'))
     # print(eval_out_dir)
@@ -166,7 +166,7 @@ def evaluate_pitch(trained_model, dataset_dir='datasets/MDB-stem-synth/', gpu_id
         return
     
     # load test dataset
-    _, _, dataset = load_mdb_dataset(dataset_dir, train_split=0.8, valid_split=0.1, seed=38)
+    dataset, _, _ = load_mdb_dataset(dataset_dir, train_split=0.8, valid_split=0.1, seed=38)
 
     
     # Initialize model
@@ -196,7 +196,7 @@ def evaluate_pitch(trained_model, dataset_dir='datasets/MDB-stem-synth/', gpu_id
     else:
         n_batch= len(dataset)//batch_size
     
-    
+    n_batch = 5
     
     loss_test = 0
     pitch_true = []
@@ -216,6 +216,9 @@ def evaluate_pitch(trained_model, dataset_dir='datasets/MDB-stem-synth/', gpu_id
             # print("Pitch true contains Nan: ", np.isnan(np.array(pitch_true)).any())
             pitch_pred.extend(activation_to_pitch(prediction, pitch_bins).detach().tolist())
             loss_test += loss(prediction,target)
+            
+            if i_batch==n_batch:
+                break
             
             
         loss_test /=n_batch
@@ -479,14 +482,15 @@ def evaluate_combined(trained_model, dataset_dir='datasets/nsynth/', gpu_id="", 
     with torch.no_grad():
         for i_batch, batch in enumerate(dataloader):
             specgram = batch['specgram'].to(device)
+            print("specgram shape: ",specgram.shape)
             target_pitch = batch['pitch'].to(device)
-            print("Target contains Nan: ", torch.isnan(target_pitch).any())
+            # print("Target contains Nan: ", torch.isnan(target_pitch).any())
             target_instrument = batch['instrument'].to(device)
             pred_pitch, pred_instrument = model(specgram)
             pred_pitch = torch.sigmoid(pred_pitch)
             pred_instrument = torch.sigmoid(pred_instrument)
-            print("pitch shapes: ",target_pitch.shape, pred_pitch.shape)
-            print("Target contains Nan: ", torch.sum(torch.isnan(target_pitch)))
+            # print("pitch shapes: ",target_pitch.shape, pred_pitch.shape)
+            # print("Target contains Nan: ", torch.sum(torch.isnan(target_pitch)))
             pitch_true.extend(activation_to_pitch(target_pitch.reshape(-1,target_pitch.shape[-1]), 
                                                   pitch_bins).detach().tolist())
             pitch_pred.extend(activation_to_pitch(pred_pitch.reshape(-1,pred_pitch.shape[-1]), 
